@@ -1,0 +1,13 @@
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\DAL.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\DAL.pdb
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\Common.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\DBHelper.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\Models.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\MySql.Data.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\Newtonsoft.Json.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\Common.pdb
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\DBHelper.pdb
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\bin\Release\Models.pdb
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\obj\Release\DAL.csprojResolveAssemblyReference.cache
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\obj\Release\DAL.dll
+D:\_项目代码\CMS建站平台\NetCMS2.0\DAL\obj\Release\DAL.pdb
