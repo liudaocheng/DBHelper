@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Configuration;
@@ -10,14 +10,19 @@ using System.Data.SqlClient;
 using System.Data.SQLite;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using Models;
 using MySql.Data.MySqlClient;
+
+/* ---------------------------------------------
+ * 作    者：suxiang
+ * 创建日期：2016年11月23日
+ * --------------------------------------------- */
 
 namespace DBUtil
 {
     /// <summary>
     /// 数据库操作类
-    /// 2016年09月09日
     /// </summary>
     public static class DBHelper
     {
@@ -183,6 +188,34 @@ namespace DBUtil
             return ":";
         }
         #endregion
+
+        #region 生成 DbParameter
+        /// <summary>
+        /// 生成 DbParameter
+        /// </summary>
+        private static DbParameter GetDbParameter(string name, object vallue)
+        {
+            DbParameter dbParameter = null;
+
+            switch (m_DBType)
+            {
+                case "oracle":
+                    dbParameter = new OracleParameter(name, vallue);
+                    break;
+                case "mssql":
+                    dbParameter = new SqlParameter(name, vallue);
+                    break;
+                case "mysql":
+                    dbParameter = new MySqlParameter(name, vallue);
+                    break;
+                case "sqlite":
+                    dbParameter = new SQLiteParameter(name, vallue);
+                    break;
+            }
+
+            return dbParameter;
+        }
+        #endregion
         #endregion
 
         #region 基础方法
@@ -190,6 +223,7 @@ namespace DBUtil
         #region Exists
         public static bool Exists(string sqlString)
         {
+            SqlFilter(ref sqlString);
             using (DbConnection conn = GetConnection())
             {
                 using (DbCommand cmd = GetCommand(sqlString, conn))
@@ -229,6 +263,7 @@ namespace DBUtil
         /// <returns>影响的记录数</returns>
         public static int ExecuteSql(string sqlString)
         {
+            SqlFilter(ref sqlString);
             DbConnection conn = m_Tran == null ? GetConnection() : m_Tran.Connection;
             using (DbCommand cmd = GetCommand(sqlString, conn))
             {
@@ -260,6 +295,7 @@ namespace DBUtil
         /// <returns>查询结果（object）</returns>
         public static object GetSingle(string sqlString)
         {
+            SqlFilter(ref sqlString);
             using (DbConnection conn = GetConnection())
             {
                 using (DbCommand cmd = GetCommand(sqlString, conn))
@@ -298,6 +334,7 @@ namespace DBUtil
         /// <returns>IDataReader</returns>
         public static DbDataReader ExecuteReader(string sqlString)
         {
+            SqlFilter(ref sqlString);
             DbConnection conn = GetConnection();
             DbCommand cmd = GetCommand(sqlString, conn);
             try
@@ -321,6 +358,7 @@ namespace DBUtil
         /// <returns>DataSet</returns>
         public static DataSet Query(string sqlString)
         {
+            SqlFilter(ref sqlString);
             using (DbConnection conn = GetConnection())
             {
                 DataSet ds = new DataSet();
@@ -342,6 +380,47 @@ namespace DBUtil
                     conn.Close();
                 }
                 return ds;
+            }
+        }
+        #endregion
+
+        #region SQL过滤，防注入
+        /// <summary>
+        /// SQL过滤，防注入
+        /// </summary>
+        /// <param name="sql">sql</param>
+        public static void SqlFilter(ref string sql)
+        {
+            List<string> keywordList = new List<string>() { 
+                "net localgroup",
+                "net user",
+                "xp_cmdshell",
+                "exec",
+                "execute",
+                "truncate",
+                "drop",
+                "restore",
+                "create",
+                "alter",
+                "rename",
+                "insert",
+                "update",
+                "delete",
+                "select"};
+            string ignore = string.Empty;
+            string upperSql = sql.ToUpper().Trim();
+            foreach (string keyword in keywordList)
+            {
+                if (upperSql.IndexOf(keyword.ToUpper()) == 0)
+                {
+                    ignore = keyword;
+                }
+            }
+            foreach (string keyword in keywordList)
+            {
+                if (ignore.ToUpper() == keyword.ToUpper()) continue;
+                Regex regex = new Regex(keyword, RegexOptions.IgnoreCase);
+                sql = regex.Replace(sql, string.Empty);
             }
         }
         #endregion
@@ -548,7 +627,7 @@ namespace DBUtil
 
             strSql.Append(string.Format("{0})", string.Join(",", propertyNameList.ToArray())));
             strSql.Append(string.Format(" values ({0})", string.Join(",", propertyNameList.ConvertAll<string>(a => m_ParameterMark + a).ToArray())));
-            SQLiteParameter[] parameters = new SQLiteParameter[savedCount];
+            DbParameter[] parameters = new DbParameter[savedCount];
             int k = 0;
             for (int i = 0; i < propertyInfoList.Length && savedCount > 0; i++)
             {
@@ -557,7 +636,7 @@ namespace DBUtil
                 if (propertyInfo.GetCustomAttributes(typeof(IsDBFieldAttribute), false).Length > 0)
                 {
                     object val = propertyInfo.GetValue(obj, null);
-                    SQLiteParameter param = new SQLiteParameter(m_ParameterMark + propertyInfo.Name, val == null ? DBNull.Value : val);
+                    DbParameter param = GetDbParameter(m_ParameterMark + propertyInfo.Name, val == null ? DBNull.Value : val);
                     parameters[k++] = param;
                 }
             }
@@ -597,7 +676,7 @@ namespace DBUtil
             }
 
             strSql.Append(string.Format(" set "));
-            SQLiteParameter[] parameters = new SQLiteParameter[savedCount];
+            DbParameter[] parameters = new DbParameter[savedCount];
             StringBuilder sbPros = new StringBuilder();
             int k = 0;
             for (int i = 0; i < propertyInfoList.Length && savedCount > 0; i++)
@@ -609,8 +688,8 @@ namespace DBUtil
                     object val = propertyInfo.GetValue(obj, null);
                     if (!object.Equals(oldVal, val))
                     {
-                        sbPros.Append(string.Format(" {0}=:{0},", propertyInfo.Name));
-                        SQLiteParameter param = new SQLiteParameter(m_ParameterMark + propertyInfo.Name, val == null ? DBNull.Value : val);
+                        sbPros.Append(string.Format(" {0}={1}{0},", propertyInfo.Name, m_ParameterMark));
+                        DbParameter param = GetDbParameter(m_ParameterMark + propertyInfo.Name, val == null ? DBNull.Value : val);
                         parameters[k++] = param;
                     }
                 }
@@ -636,9 +715,11 @@ namespace DBUtil
         {
             Type type = typeof(T);
             StringBuilder sbSql = new StringBuilder();
-            sbSql.Append(string.Format("delete from {0} where {2}='{1}'", type.Name, id, GetIdName(type)));
+            DbParameter[] cmdParms = new DbParameter[1];
+            cmdParms[0] = GetDbParameter(m_ParameterMark + GetIdName(type), id);
+            sbSql.Append(string.Format("delete from {0} where {2}={1}{2}", type.Name, m_ParameterMark, GetIdName(type)));
 
-            ExecuteSql(sbSql.ToString());
+            ExecuteSql(sbSql.ToString(), cmdParms);
         }
         /// <summary>
         /// 根据Id集合删除
@@ -649,9 +730,18 @@ namespace DBUtil
 
             Type type = typeof(T);
             StringBuilder sbSql = new StringBuilder();
-            sbSql.Append(string.Format("delete from {0} where {2} in ({1})", type.Name, ids, GetIdName(type)));
+            string[] idArr = ids.Split(',');
+            DbParameter[] cmdParms = new DbParameter[idArr.Length];
+            sbSql.AppendFormat("delete from {0} where {1} in (", type.Name, GetIdName(type));
+            for (int i = 0; i < idArr.Length; i++)
+            {
+                cmdParms[i] = GetDbParameter(m_ParameterMark + GetIdName(type) + i, idArr[i]);
+                sbSql.AppendFormat("{1}{2}{3},", type.Name, m_ParameterMark, GetIdName(type), i);
+            }
+            sbSql.Remove(sbSql.Length - 1, 1);
+            sbSql.Append(")");
 
-            ExecuteSql(sbSql.ToString());
+            ExecuteSql(sbSql.ToString(), cmdParms);
         }
         /// <summary>
         /// 根据条件删除
@@ -662,6 +752,7 @@ namespace DBUtil
 
             Type type = typeof(T);
             StringBuilder sbSql = new StringBuilder();
+            SqlFilter(ref conditions);
             sbSql.Append(string.Format("delete from {0} where {1}", type.Name, conditions));
 
             ExecuteSql(sbSql.ToString());
@@ -1011,7 +1102,7 @@ namespace DBUtil
         /// <summary>
         /// 获取列表
         /// </summary>
-        public static List<T> FindListBySql<T>(string sql, params SQLiteParameter[] cmdParms) where T : new()
+        public static List<T> FindListBySql<T>(string sql, params DbParameter[] cmdParms) where T : new()
         {
             List<T> list = new List<T>();
             object obj;
@@ -1189,7 +1280,7 @@ namespace DBUtil
         /// <typeparam name="T"></typeparam>
         /// <param name="sql"></param>
         /// <returns></returns>
-        public static PagerModel FindPageBySql<T>(string sql, string orderby, int pageSize, int currentPage, params SQLiteParameter[] cmdParms) where T : new()
+        public static PagerModel FindPageBySql<T>(string sql, string orderby, int pageSize, int currentPage, params DbParameter[] cmdParms) where T : new()
         {
             PagerModel pagerModel = new PagerModel(currentPage, pageSize);
 
@@ -1207,6 +1298,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         pagerModel.totalRows = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1);
@@ -1229,6 +1321,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         pagerModel.totalRows = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1) + 1;
@@ -1244,6 +1337,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         pagerModel.totalRows = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1);
@@ -1262,6 +1356,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         pagerModel.totalRows = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1);
@@ -1291,7 +1386,7 @@ namespace DBUtil
         /// <summary>
         /// 分页(任意entity，尽量少的字段)
         /// </summary>
-        public static DataSet FindPageBySql(string sql, string orderby, int pageSize, int currentPage, out int totalCount, params SQLiteParameter[] cmdParms)
+        public static DataSet FindPageBySql(string sql, string orderby, int pageSize, int currentPage, out int totalCount, params DbParameter[] cmdParms)
         {
             DataSet ds = null;
 
@@ -1310,6 +1405,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         totalCount = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1);
@@ -1332,6 +1428,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         totalCount = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1) + 1;
@@ -1347,6 +1444,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         totalCount = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1);
@@ -1365,6 +1463,7 @@ namespace DBUtil
                         #region 分页查询语句
                         commandText = string.Format("select count(*) from ({0}) T", sql);
                         cmd = GetCommand(commandText, connection);
+                        foreach (DbParameter parm in cmdParms) cmd.Parameters.Add(parm);
                         totalCount = int.Parse(cmd.ExecuteScalar().ToString());
 
                         startRow = pageSize * (currentPage - 1);
@@ -1513,6 +1612,7 @@ namespace DBUtil
         /// </summary>
         public static void CommitTransaction()
         {
+            if (m_Tran == null) return; //防止重复提交
             DbConnection conn = m_Tran.Connection;
             try
             {
@@ -1537,6 +1637,7 @@ namespace DBUtil
         /// </summary>
         public static void RollbackTransaction()
         {
+            if (m_Tran == null) return; //防止重复回滚
             DbConnection conn = m_Tran.Connection;
             m_Tran.Rollback();
             if (conn.State == ConnectionState.Open) conn.Close();
