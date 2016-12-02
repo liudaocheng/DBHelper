@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
@@ -137,7 +137,20 @@ namespace DAL
                         }
                     }
                     break;
+                case "LONG":
+                    if (column["notnull"] == "1")
+                    {
+                        data_type = "long";
+                    }
+                    else
+                    {
+                        data_type = "long?";
+                    }
+                    break;
                 case "VARCHAR2":
+                    data_type = "string";
+                    break;
+                case "NVARCHAR2":
                     data_type = "string";
                     break;
                 case "CHAR":
@@ -156,6 +169,8 @@ namespace DAL
                 case "CLOB":
                     data_type = "string";
                     break;
+                default:
+                    throw new Exception("Model生成器未实现数据库字段类型" + column["data_type"] + "的转换");
             }
             return data_type;
         }
