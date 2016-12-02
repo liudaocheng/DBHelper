@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
@@ -72,7 +72,7 @@ namespace Model生成器.DAL
             {
                 Dictionary<string, string> dic = new Dictionary<string, string>();
                 dic.Add("columns_name", dr["name"].ToString());
-                dic.Add("notnull", dr["is_nullable"].ToString() == "0" ? "1" : "0");
+                dic.Add("notnull", dr["is_nullable"].ToString() == "False" ? "1" : "0");
                 dic.Add("comments", dr["value"].ToString());
                 string dataType = dr["column_type"].ToString();
                 dic.Add("data_type", dataType);
@@ -103,13 +103,34 @@ namespace Model生成器.DAL
             switch (column["data_type"])
             {
                 case "int":
-                    data_type = "int";
+                    if (column["notnull"] == "1")
+                    {
+                        data_type = "int";
+                    }
+                    else
+                    {
+                        data_type = "int?";
+                    }
                     break;
                 case "bigint":
-                    data_type = "long";
+                    if (column["notnull"] == "1")
+                    {
+                        data_type = "long";
+                    }
+                    else
+                    {
+                        data_type = "long?";
+                    }
                     break;
                 case "decimal":
-                    data_type = "decimal";
+                    if (column["notnull"] == "1")
+                    {
+                        data_type = "decimal";
+                    }
+                    else
+                    {
+                        data_type = "decimal?";
+                    }
                     break;
                 case "nvarchar":
                     data_type = "string";
@@ -124,11 +145,21 @@ namespace Model生成器.DAL
                     data_type = "string";
                     break;
                 case "datetime":
-                    data_type = "DateTime";
+                    if (column["notnull"] == "1")
+                    {
+                        data_type = "DateTime";
+                    }
+                    else
+                    {
+                        data_type = "DateTime?";
+                    }
                     break;
+                default:
+                    throw new Exception("Model生成器未实现数据库字段类型" + column["data_type"] + "的转换");
             }
             return data_type;
         }
         #endregion
+
     }
 }
